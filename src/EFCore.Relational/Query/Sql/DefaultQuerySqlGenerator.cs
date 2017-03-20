@@ -365,27 +365,10 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
             Check.NotNull(ordering, nameof(ordering));
 
             var orderingExpression = ordering.Expression;
-            var aliasExpression = orderingExpression as AliasExpression;
 
-            if (aliasExpression != null)
+            if (orderingExpression is AliasExpression aliasExpression)
             {
-                if (aliasExpression.Alias != null)
-                {
-                    var columnExpression = aliasExpression.TryGetColumnExpression();
-
-                    if (columnExpression != null)
-                    {
-                        _relationalCommandBuilder
-                            .Append(SqlGenerator.DelimitIdentifier(columnExpression.TableAlias))
-                            .Append(".");
-                    }
-
-                    _relationalCommandBuilder.Append(SqlGenerator.DelimitIdentifier(aliasExpression.Alias));
-                }
-                else
-                {
-                    Visit(aliasExpression.Expression);
-                }
+                _relationalCommandBuilder.Append(SqlGenerator.DelimitIdentifier(aliasExpression.Alias));
             }
             else if (orderingExpression is ConstantExpression
                      || orderingExpression is ParameterExpression)
@@ -1497,12 +1480,13 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
         ///     A RelationalTypeMapping.
         /// </returns>
         protected virtual RelationalTypeMapping InferTypeMappingFromColumn([NotNull] Expression expression)
-        {
-            var property = expression.TryGetProperty();
-            return property != null
-                ? Dependencies.RelationalTypeMapper.FindMapping(property)
-                : null;
-        }
+            => expression is ColumnExpression columnExpression
+                ? Dependencies.RelationalTypeMapper.FindMapping(columnExpression.Property)
+                : (expression is ColumnReferenceExpression columnReferenceExpression
+                    ? InferTypeMappingFromColumn(columnReferenceExpression.Expression)
+                    : (expression is AliasExpression aliasExpression
+                        ? InferTypeMappingFromColumn(aliasExpression.Expression)
+                        : null));
 
         /// <summary>
         ///     Attempts to generate binary operator for a given expression type.
@@ -1593,34 +1577,15 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
                     var leftExpression = expression.Left.RemoveConvert();
                     var rightExpression = expression.Right.RemoveConvert();
 
-                    var parameter
-                        = rightExpression as ParameterExpression
-                          ?? leftExpression as ParameterExpression;
+                    var parameterExpression = (leftExpression as ParameterExpression)
+                                              ?? (rightExpression as ParameterExpression);
 
-                    object parameterValue;
-                    if (parameter != null
-                        && _parameterValues.TryGetValue(parameter.Name, out parameterValue))
+                    if (parameterExpression != null
+                        && _parameterValues.TryGetValue(parameterExpression.Name, out object parameterValue))
                     {
-                        if (parameterValue == null)
-                        {
-                            var columnExpression
-                                = leftExpression.TryGetColumnExpression()
-                                  ?? rightExpression.TryGetColumnExpression();
+                        var nonParameterExpression = leftExpression is ParameterExpression ? rightExpression : leftExpression;
 
-                            if (columnExpression != null)
-                            {
-                                return
-                                    expression.NodeType == ExpressionType.Equal
-                                        ? (Expression)new IsNullExpression(columnExpression)
-                                        : Expression.Not(new IsNullExpression(columnExpression));
-                            }
-                        }
-
-                        var constantExpression
-                            = leftExpression as ConstantExpression
-                              ?? rightExpression as ConstantExpression;
-
-                        if (constantExpression != null)
+                        if (nonParameterExpression is ConstantExpression constantExpression)
                         {
                             if (parameterValue == null
                                 && constantExpression.Value == null)
@@ -1639,6 +1604,14 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
                                         ? Expression.Constant(false)
                                         : Expression.Constant(true);
                             }
+                        }
+
+                        if (parameterValue == null)
+                        {
+                            return
+                                expression.NodeType == ExpressionType.Equal
+                                    ? (Expression)new IsNullExpression(nonParameterExpression)
+                                    : Expression.Not(new IsNullExpression(nonParameterExpression));
                         }
                     }
                 }

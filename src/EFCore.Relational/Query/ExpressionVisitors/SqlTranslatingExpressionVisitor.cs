@@ -665,17 +665,17 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
 
         private Expression TryBindQuerySourcePropertyExpression(MemberExpression memberExpression)
         {
-            if (memberExpression.Expression is QuerySourceReferenceExpression qsre)
-            {
-                var selectExpression = _queryModelVisitor.TryGetQuery(qsre.ReferencedQuerySource);
+            //if (memberExpression.Expression is QuerySourceReferenceExpression qsre)
+            //{
+            //    var selectExpression = _queryModelVisitor.TryGetQuery(qsre.ReferencedQuerySource);
 
-                if (selectExpression != null)
-                {
-                    return selectExpression.Projection
-                        .OfType<AliasExpression>()
-                        .SingleOrDefault(ae => Equals(ae.SourceMember, memberExpression.Member));
-                }
-            }
+            //    if (selectExpression != null)
+            //    {
+            //        return selectExpression.Projection
+            //            .OfType<AliasExpression>()
+            //            .SingleOrDefault(ae => Equals(ae.SourceMember, memberExpression.Member));
+            //    }
+            //}
 
             return null;
         }

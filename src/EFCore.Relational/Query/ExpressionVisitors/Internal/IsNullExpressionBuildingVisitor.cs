@@ -85,9 +85,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                 return Visit(aliasExpression.Expression);
             }
 
-            var columnExpression = node.TryGetColumnExpression();
-
-            if (columnExpression != null
+            if (node is ColumnExpression columnExpression
                 && columnExpression.Property.IsNullable)
             {
                 AddToResult(new IsNullExpression(node));

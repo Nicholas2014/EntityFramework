@@ -19,8 +19,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
 
         private readonly string _alias;
 
-        private Expression _sourceExpression;
-
         /// <summary>
         ///     Creates a new instance of an AliasExpression.
         /// </summary>
@@ -48,8 +46,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// </summary>
         public virtual Expression Expression => _expression;
 
-        // TODO: Revisit why we need this. Try and remove
-
         /// <summary>
         ///     Returns the node type of this <see cref="Expression" />. (Inherited from <see cref="Expression" />.)
         /// </summary>
@@ -61,32 +57,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// </summary>
         /// <returns> The <see cref="Type" /> that represents the static type of the expression. </returns>
         public override Type Type => _expression.Type;
-
-        /// <summary>
-        ///     Gets or sets the source expression.
-        /// </summary>
-        /// <value>
-        ///     The source expression.
-        /// </value>
-        public virtual Expression SourceExpression
-        {
-            get { return _sourceExpression; }
-            [param: NotNull]
-            set
-            {
-                Check.NotNull(value, nameof(value));
-
-                _sourceExpression = value;
-            }
-        }
-
-        /// <summary>
-        ///     Gets or sets the source member.
-        /// </summary>
-        /// <value>
-        ///     The source member.
-        /// </value>
-        public virtual MemberInfo SourceMember { get; [param: CanBeNull] set; }
 
         /// <summary>
         ///     Dispatches to the specific visit method for this node type.

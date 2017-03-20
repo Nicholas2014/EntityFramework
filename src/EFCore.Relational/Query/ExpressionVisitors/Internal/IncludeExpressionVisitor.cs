@@ -396,9 +396,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
                         foreach (var ordering in selectExpression.OrderBy)
                         {
-                            // ReSharper disable once PossibleNullReferenceException
                             var principalKeyProperty
-                                = ordering.Expression.TryGetProperty();
+                                = TryGetProperty(ordering.Expression);
 
                             var referencedForeignKeyProperty = pkPropertiesToFkPropertiesMap[principalKeyProperty];
 
@@ -579,7 +578,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
             var candidates
                 = projections
-                    .Where(p => p.TryGetProperty() == property)
+                    .Where(p => TryGetProperty(p) == property)
                     .ToList();
 
             if (candidates.Count == 1)
@@ -587,7 +586,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                 return candidates[0].LiftExpressionFromSubquery(tableExpression);
             }
 
-            return candidates.Last(c => c.TryGetQuerySource() == querySource).LiftExpressionFromSubquery(tableExpression);
+            return candidates.Last(c => TryGetQuerySource(c) == querySource).LiftExpressionFromSubquery(tableExpression);
         }
 
         private static IEnumerable<Expression> ExtractProjections(TableExpressionBase tableExpression)
@@ -612,7 +611,25 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         private static bool IsOrderingOnNonPrincipalKeyProperties(
                 IEnumerable<Ordering> orderings, IReadOnlyList<IProperty> properties)
             => orderings
-                .Select(ordering => ordering.Expression.TryGetProperty())
+                .Select(ordering => TryGetProperty(ordering.Expression))
                 .Any(property => property == null || !properties.Contains(property));
-        }
+
+        private static IProperty TryGetProperty(Expression expression)
+            => expression is ColumnExpression columnExpression
+                ? columnExpression.Property
+                : (expression is AliasExpression aliasExpression
+                    ? TryGetProperty(aliasExpression.Expression)
+                    : (expression is ColumnReferenceExpression columnReferenceExpression)
+                        ? TryGetProperty(columnReferenceExpression.Expression)
+                        : null);
+
+        private IQuerySource TryGetQuerySource(Expression expression)
+            => expression is ColumnExpression columnExpression
+                ? columnExpression.Table.QuerySource
+                : (expression is AliasExpression aliasExpression
+                    ? TryGetQuerySource(aliasExpression.Expression)
+                    : (expression is ColumnReferenceExpression columnReferenceExpression)
+                        ? columnReferenceExpression.Table.QuerySource
+                        : null);
+    }
 }

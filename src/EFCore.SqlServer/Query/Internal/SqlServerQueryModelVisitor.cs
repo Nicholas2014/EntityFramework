@@ -121,7 +121,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                     new RowNumberExpression(subQuery.OrderBy));
 
                 subQuery.ClearOrderBy();
-                subQuery.AddToProjection(innerRowNumberExpression, false);
+                subQuery.AddToProjection(innerRowNumberExpression, resetProjectStar: false);
 
                 var rowNumberReferenceExpression = new ColumnReferenceExpression(innerRowNumberExpression, subQuery);
 

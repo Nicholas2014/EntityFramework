@@ -28,28 +28,13 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             [NotNull] string name,
             [NotNull] IProperty property,
             [NotNull] TableExpressionBase tableExpression)
-            : this(name, Check.NotNull(property, nameof(property)).ClrType, tableExpression)
-        {
-            _property = property;
-        }
-
-        /// <summary>
-        ///     Creates a new instance of a ColumnExpression.
-        /// </summary>
-        /// <param name="name"> The column name. </param>
-        /// <param name="type"> The column type. </param>
-        /// <param name="tableExpression"> The target table expression. </param>
-        public ColumnExpression(
-            [NotNull] string name,
-            [NotNull] Type type,
-            [NotNull] TableExpressionBase tableExpression)
         {
             Check.NotEmpty(name, nameof(name));
-            Check.NotNull(type, nameof(type));
+            Check.NotNull(property, nameof(property));
             Check.NotNull(tableExpression, nameof(tableExpression));
 
             Name = name;
-            Type = type;
+            _property = property;
             _tableExpression = tableExpression;
         }
 
@@ -89,7 +74,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         ///     Gets the static type of the expression that this <see cref="Expression" /> represents. (Inherited from <see cref="Expression" />.)
         /// </summary>
         /// <returns> The <see cref="Type" /> that represents the static type of the expression. </returns>
-        public override Type Type { get; }
+        public override Type Type => _property.ClrType;
 
         /// <summary>
         ///     Dispatches to the specific visit method for this node type.
@@ -121,11 +106,10 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         protected override Expression VisitChildren(ExpressionVisitor visitor) => this;
 
         private bool Equals([NotNull] ColumnExpression other)
-            // TODO:TITU Compare on names only because multiple properties can map to same column
-            => (Name == other.Name)
-                //|| (_property != null && _property.Equals(other._property)))
+            // Compare on names only because multiple properties can map to same column
+            => Name == other.Name
                && Type == other.Type
-            // TODO:TITU compare on table alias because sometimes tables are changed due to join
+               // TODO:TITU compare on table alias because sometimes tables are changed due to join
                && TableAlias.Equals(other.TableAlias);
 
         /// <summary>
@@ -135,7 +119,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// <returns>
         ///     true if the objects are considered equal, false if they are not.
         /// </returns>
-        public override bool Equals([CanBeNull] object obj)
+        public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj))
             {
@@ -147,22 +131,18 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                 return true;
             }
 
-            return (obj.GetType() == GetType())
+            return obj.GetType() == GetType()
                    && Equals((ColumnExpression)obj);
         }
 
-        /// <summary>
-        ///     Returns a hash code for this object.
-        /// </summary>
-        /// <returns>
-        ///     A hash code for this object.
-        /// </returns>
         public override int GetHashCode()
         {
             unchecked
             {
-                return (_property.GetHashCode() * 397)
-                       ^ _tableExpression.GetHashCode();
+                var hashCode = _property?.GetHashCode() ?? 0;
+                hashCode = (hashCode * 397) ^ (_tableExpression?.GetHashCode() ?? 0);
+                hashCode = (hashCode * 397) ^ (Name?.GetHashCode() ?? 0);
+                return hashCode;
             }
         }
 

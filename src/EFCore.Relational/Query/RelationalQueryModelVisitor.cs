@@ -610,37 +610,27 @@ namespace Microsoft.EntityFrameworkCore.Query
             private IForeignKey _matchingCandidate;
             private List<IProperty> _matchingCandidateProperties;
 
-            public override Expression Visit(Expression expression)
-            {
-                var binaryExpression = expression as BinaryExpression;
-
-                if (binaryExpression != null)
-                {
-                    return VisitBinary(binaryExpression);
-                }
-
-                return expression;
-            }
-
-            protected override Expression VisitBinary(BinaryExpression node)
+            protected override Expression VisitBinary(BinaryExpression binaryExpression)
             {
                 if (DependentToPrincipalFound)
                 {
-                    return node;
+                    return binaryExpression;
                 }
 
-                if (node.NodeType == ExpressionType.Equal)
+                if (binaryExpression.NodeType == ExpressionType.Equal)
                 {
-                    var leftProperty = node.Left.RemoveConvert().TryGetColumnExpression()?.Property;
-                    var rightProperty = node.Right.RemoveConvert().TryGetColumnExpression()?.Property;
+                    var leftExpression = binaryExpression.Left.RemoveConvert();
+                    var rightExpression = binaryExpression.Right.RemoveConvert();
+                    var leftProperty = (((leftExpression as NullableExpression)?.Operand ?? leftExpression) as ColumnExpression)?.Property;
+                    var rightProperty = (((rightExpression as NullableExpression)?.Operand ?? rightExpression) as ColumnExpression)?.Property;
                     if (leftProperty != null
                         && rightProperty != null
                         && leftProperty.IsForeignKey()
                         && rightProperty.IsKey())
                     {
                         var keyDeclaringEntityType = rightProperty.GetContainingKeys().First().DeclaringEntityType;
-                        var matchingForeignKeys = leftProperty.GetContainingForeignKeys().Where(k => k.PrincipalKey.DeclaringEntityType == keyDeclaringEntityType);
-                        if (matchingForeignKeys.Count() == 1)
+                        var matchingForeignKeys = leftProperty.GetContainingForeignKeys().Where(k => k.PrincipalKey.DeclaringEntityType == keyDeclaringEntityType).ToList();
+                        if (matchingForeignKeys.Count == 1)
                         {
                             var matchingKey = matchingForeignKeys.Single();
                             if (rightProperty.GetContainingKeys().Contains(matchingKey.PrincipalKey))
@@ -659,23 +649,20 @@ namespace Microsoft.EntityFrameworkCore.Query
                                 if (_matchingCandidate.Properties.All(p => _matchingCandidateProperties.Contains(p)))
                                 {
                                     DependentToPrincipalFound = true;
-                                    return node;
+                                    return binaryExpression;
                                 }
                             }
                         }
                     }
 
-                    _expressions.Add(node.Left.RemoveConvert());
+                    _expressions.Add(binaryExpression.Left.RemoveConvert());
 
-                    return node;
+                    return binaryExpression;
                 }
 
-                if (node.NodeType == ExpressionType.AndAlso)
-                {
-                    return base.VisitBinary(node);
-                }
-
-                return node;
+                return binaryExpression.NodeType == ExpressionType.AndAlso
+                    ? base.VisitBinary(binaryExpression)
+                    : binaryExpression;
             }
         }
 
@@ -1505,7 +1492,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                         new Ordering(expression, OrderingDirection.Asc));
                 }
             }
-            
+
             var outerShaper = ExtractShaper(outerShapedQuery, 0);
             var innerShaper = ExtractShaper(innerShapedQuery, previousProjectionCount);
 

@@ -127,9 +127,9 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                     _offset = _offset,
                     _isDistinct = _isDistinct,
                     _subqueryDepth = _subqueryDepth,
-                    IsProjectStar = IsProjectStar,
                     Predicate = Predicate,
-                    ProjectStarTable = ProjectStarTable
+                    ProjectStarTable = ProjectStarTable,
+                    IsProjectStar = IsProjectStar
                 };
 
             if (alias != null)
@@ -138,8 +138,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             }
 
             selectExpression._projection.AddRange(_projection);
-
-            selectExpression.AddTables(_tables);
+            selectExpression._tables.AddRange(_tables);
             selectExpression._orderBy.AddRange(_orderBy);
 
             return selectExpression;
@@ -196,20 +195,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             Check.NotNull(tableExpression, nameof(tableExpression));
 
             _tables.Add(tableExpression);
-        }
-
-        /// <summary>
-        ///     Adds tables to this SelectExprssion.
-        /// </summary>
-        /// <param name="tableExpressions"> The table expressions. </param>
-        private void AddTables([NotNull] IEnumerable<TableExpressionBase> tableExpressions)
-        {
-            Check.NotNull(tableExpressions, nameof(tableExpressions));
-
-            foreach (var tableExpression in tableExpressions.ToList())
-            {
-                AddTable(tableExpression);
-            }
         }
 
         /// <summary>
@@ -325,9 +310,9 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             [param: CanBeNull]
             set
             {
-                if (value != null)
+                if (value != null && _limit != null)
                 {
-                    PushDownIfLimit();
+                    PushDownSubquery();
                 }
 
                 _limit = value;
@@ -353,22 +338,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                 }
 
                 _offset = value;
-            }
-        }
-
-        private void PushDownIfLimit()
-        {
-            if (_limit != null)
-            {
-                PushDownSubquery();
-            }
-        }
-
-        private void PushDownIfDistinct()
-        {
-            if (_isDistinct)
-            {
-                PushDownSubquery();
             }
         }
 
@@ -418,7 +387,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                 subquery._projection.Add(expressionToAdd);
             }
 
-            subquery.AddTables(_tables);
+            subquery._tables.AddRange(_tables);
             subquery._orderBy.AddRange(_orderBy);
 
             subquery.Predicate = Predicate;
@@ -463,19 +432,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                         var projectionIndex = subquery.AddToProjection(expression);
                         expressionToAdd = subquery.Projection[projectionIndex].LiftExpressionFromSubquery(subquery);
                     }
-                    else
-                    {
-                        //TODO:TITU Hack to copy order by outside
-                        var columnExpression = expression.TryGetColumnExpression();
-                        if (columnExpression != null)
-                        {
-                            //expressionToAdd = new ColumnReferenceExpression(
-                            //    columnExpression.Name,
-                            //    columnExpression.Property,
-                            //    ,
-                            //    subquery);
-                        }
-                    }
                 }
 
                 _orderBy.Add(new Ordering(expressionToAdd, ordering.OrderingDirection));
@@ -517,6 +473,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                 BindPropertyToSelectExpression(column, property, querySource));
         }
 
+        //TODO: TITU Include HACK
         public virtual int AddToProjection(
             [NotNull] string column,
             [NotNull] IProperty property,
@@ -556,9 +513,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             }
 
             var projectionIndex
-                = _projection.FindIndex(e =>
-                    e.Equals(expression)
-                    || (e as AliasExpression)?.Expression.Equals(expression) == true);
+                = _projection.FindIndex(e => ExpressionEqualityComparer.Equals(e, expression));
 
             if (projectionIndex != -1)
             {
@@ -666,8 +621,10 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         {
             Check.NotNull(expression, nameof(expression));
 
-            PushDownIfLimit();
-            PushDownIfDistinct();
+            if (_limit != null || _isDistinct)
+            {
+                PushDownSubquery();
+            }
 
             ClearProjection();
             AddToProjection(expression);
@@ -676,10 +633,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// <summary>
         ///     Clears the projection.
         /// </summary>
-        public virtual void ClearProjection()
-        {
-            _projection.Clear();
-        }
+        public virtual void ClearProjection() => _projection.Clear();
 
         /// <summary>
         ///     Removes a range from the projection.
@@ -691,18 +645,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             {
                 _projection.RemoveRange(index, _projection.Count - index);
             }
-        }
-
-        /// <summary>
-        ///     Removes expressions from the projection corresponding to the
-        ///     supplied <see cref="Ordering" /> expressions.
-        /// </summary>
-        /// <param name="orderBy"> The Orderings to remove from the projection. </param>
-        public virtual void RemoveFromProjection([NotNull] IEnumerable<Ordering> orderBy)
-        {
-            Check.NotNull(orderBy, nameof(orderBy));
-
-            _projection.RemoveAll(ce => orderBy.Any(o => ReferenceEquals(o.Expression, ce)));
         }
 
         /// <summary>
@@ -726,7 +668,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             var projectionToSearch = BindPropertyToSelectExpression(column, property, querySource);
 
             return _projection
-                .FindIndex(e => e.Equals(projectionToSearch) || (e as AliasExpression)?.Expression.Equals(projectionToSearch) == true);
+                .FindIndex(e => ExpressionEqualityComparer.Equals(e, projectionToSearch));
         }
 
         public virtual Expression BindPropertyToSelectExpression(
@@ -886,18 +828,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         public virtual void ClearOrderBy() => _orderBy.Clear();
 
         /// <summary>
-        ///     Removes a range from list of order by elements.
-        /// </summary>
-        /// <param name="index"> Zero-based index of the start of the range to remove. </param>
-        public virtual void RemoveRangeFromOrderBy(int index)
-        {
-            if (index < _orderBy.Count)
-            {
-                _orderBy.RemoveRange(index, _orderBy.Count - index);
-            }
-        }
-
-        /// <summary>
         ///     Transforms the projection of this SelectExpression by expanding the wildcard ('*') projection
         ///     into individual explicit projection expressions.
         /// </summary>
@@ -1033,7 +963,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             return outerJoinExpression;
         }
 
-        //TODO:TITU Check if currentAlias can be made non-nullable and parameterless method to create alias 
         private string CreateUniqueProjectionAlias(string currentAlias, bool useColumnAliasPrefix = false)
         {
             var uniqueAlias = currentAlias ?? ColumnAliasPrefix;
@@ -1162,71 +1091,5 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             => CreateDefaultQuerySqlGenerator()
                 .GenerateSql(new Dictionary<string, object>())
                 .CommandText;
-
-        // TODO: Make polymorphic
-
-        /// <summary>
-        ///     Updates the table expression of any column expressions in the target expression.
-        /// </summary>
-        /// <param name="expression"> The target expression. </param>
-        /// <param name="tableExpression"> The new table expression. </param>
-        /// <returns>
-        ///     An updated expression.
-        /// </returns>
-        public virtual Expression UpdateColumnExpression(
-            [NotNull] Expression expression,
-            [NotNull] TableExpressionBase tableExpression)
-        {
-            Check.NotNull(expression, nameof(expression));
-            Check.NotNull(tableExpression, nameof(tableExpression));
-
-            //var columnExpression = expression as ColumnExpression;
-
-            //if (columnExpression != null)
-            //{
-            //    return columnExpression.Property == null
-            //        ? new ColumnExpression(columnExpression.Name, columnExpression.Type, tableExpression)
-            //        : new ColumnExpression(columnExpression.Name, columnExpression.Property, tableExpression);
-            //}
-
-            //var aliasExpression = expression as AliasExpression;
-
-            //if (aliasExpression != null)
-            //{
-            //    var selectExpression = aliasExpression.Expression as SelectExpression;
-            //    if (selectExpression != null)
-            //    {
-            //        return new ColumnExpression(aliasExpression.Alias, selectExpression.Type, tableExpression);
-            //    }
-
-            //    return new AliasExpression(
-            //        aliasExpression.Alias,
-            //        UpdateColumnExpression(aliasExpression.Expression, tableExpression))
-            //    {
-            //        SourceMember = aliasExpression.SourceMember
-            //    };
-            //}
-
-            //switch (expression.NodeType)
-            //{
-            //    case ExpressionType.Coalesce:
-            //    {
-            //        var binaryExpression = (BinaryExpression)expression;
-            //        var left = UpdateColumnExpression(binaryExpression.Left, tableExpression);
-            //        var right = UpdateColumnExpression(binaryExpression.Right, tableExpression);
-            //        return binaryExpression.Update(left, binaryExpression.Conversion, right);
-            //    }
-            //    case ExpressionType.Conditional:
-            //    {
-            //        var conditionalExpression = (ConditionalExpression)expression;
-            //        var test = UpdateColumnExpression(conditionalExpression.Test, tableExpression);
-            //        var ifTrue = UpdateColumnExpression(conditionalExpression.IfTrue, tableExpression);
-            //        var ifFalse = UpdateColumnExpression(conditionalExpression.IfFalse, tableExpression);
-            //        return conditionalExpression.Update(test, ifTrue, ifFalse);
-            //    }
-            //}
-
-            return expression;
-        }
     }
 }

@@ -447,22 +447,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                 selectExpression.IsDistinct = true;
 
                 if (selectExpression.OrderBy.Any(o =>
-                    {
-                        var orderByColumnExpression = o.Expression.TryGetColumnExpression();
-
-                        if (orderByColumnExpression == null)
-                        {
-                            return true;
-                        }
-
-                        return !selectExpression.Projection.Any(e =>
-                            {
-                                var projectionColumnExpression = e.TryGetColumnExpression();
-
-                                return projectionColumnExpression != null
-                                       && projectionColumnExpression.Equals(orderByColumnExpression);
-                            });
-                    }))
+                    !selectExpression.Projection.Contains(o.Expression, SelectExpression.ExpressionEqualityComparer)))
                 {
                     handlerContext.SelectExpression.ClearOrderBy();
                 }

@@ -93,20 +93,20 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
 
             if (selectExpression != null)
             {
-                for (var i = 0; i < expression.Arguments.Count; i++)
-                {
-                    var aliasExpression
-                        = selectExpression.Projection
-                            .OfType<AliasExpression>()
-                            .SingleOrDefault(ae => ae.SourceExpression == expression.Arguments[i]);
+                //for (var i = 0; i < expression.Arguments.Count; i++)
+                //{
+                //    var aliasExpression
+                //        = selectExpression.Projection
+                //            .OfType<AliasExpression>()
+                //            .SingleOrDefault(ae => ae.SourceExpression == expression.Arguments[i]);
 
-                    if (aliasExpression != null)
-                    {
-                        aliasExpression.SourceMember
-                            = expression.Members?[i]
-                              ?? (expression.Arguments[i] as MemberExpression)?.Member;
-                    }
-                }
+                //    if (aliasExpression != null)
+                //    {
+                //        aliasExpression.SourceMember
+                //            = expression.Members?[i]
+                //              ?? (expression.Arguments[i] as MemberExpression)?.Member;
+                //    }
+                //}
             }
 
             return newNewExpression;
@@ -156,10 +156,6 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
 
                     if (!(node is NewExpression))
                     {
-                        AliasExpression aliasExpression;
-
-                        int index;
-
                         if (!(node is QuerySourceReferenceExpression))
                         {
                             if (sqlExpression is NullableExpression nullableExpression)
@@ -167,18 +163,9 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
                                 sqlExpression = nullableExpression.Operand;
                             }
 
-                            var columnExpression = sqlExpression.TryGetColumnExpression();
-
-                            if (columnExpression != null)
+                            if (sqlExpression is ColumnExpression)
                             {
-                                index = selectExpression.AddToProjection(sqlExpression);
-
-                                aliasExpression = selectExpression.Projection[index] as AliasExpression;
-
-                                if (aliasExpression != null)
-                                {
-                                    aliasExpression.SourceExpression = node;
-                                }
+                                selectExpression.AddToProjection(sqlExpression);
 
                                 return node;
                             }
@@ -192,14 +179,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
 
                             if (targetExpression.Type == typeof(ValueBuffer))
                             {
-                                index = selectExpression.AddToProjection(sqlExpression);
-
-                                aliasExpression = selectExpression.Projection[index] as AliasExpression;
-
-                                if (aliasExpression != null)
-                                {
-                                    aliasExpression.SourceExpression = node;
-                                }
+                                var index = selectExpression.AddToProjection(sqlExpression);
 
                                 var readValueExpression
                                     = _entityMaterializerSource
